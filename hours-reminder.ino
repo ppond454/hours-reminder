@@ -1,7 +1,7 @@
+#include <AccelStepper.h>
 #include <NTPClient.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include <Stepper.h>
 
 #define CONNECTION_TIMEOUT 10
 #define LED 2
@@ -11,26 +11,29 @@
 #define B 17
 #define C 18
 #define D 19
+#define motorInterfaceType 4
 
-Stepper motor(32, A, B, C, D);
 
 // Configuration
-const int stepsPerRevolution = 360 / 5.625 / 64;               // 360 degrees / (5.625 / 64)
-const int totalRevolutions = 30;                               // Target: 30 revolutions
-const int totalSteps = stepsPerRevolution * totalRevolutions;  // Total steps
+const float stepsPerRevolution = 360 / (5.625 / 64);                   //
+const float totalRevolutions = 30;                                     // Target: 30 revolutions
+const float totalSteps = stepsPerRevolution * totalRevolutions * 0.5;  // Total steps
+const float speedMotor = 700.00;
 
 const char* ssid = "Weed_1g";
 const char* password = "0800569812";
-const int ROUND = 30;
-const int motorSpeed = 100;
 int tempMin = -1;
+bool isPlaying = false;
 
+AccelStepper motor(motorInterfaceType, A, B, C, D);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
 
 void setup() {
   Serial.begin(115200);
   setupPin();
+  motor.setMaxSpeed(speedMotor);
+  motor.setAcceleration(speedMotor);
   delay(1000);
   connectWifi();
 }
@@ -38,7 +41,6 @@ void setup() {
 void setupPin() {
   pinMode(PIN_OUT, OUTPUT);
   pinMode(LED, OUTPUT);
-
 
   // Setup pin motor
   pinMode(A, OUTPUT);
@@ -72,7 +74,32 @@ void connectWifi() {
 
 void loop() {
   timeClient.update();
-  int t = timeClient.getMinutes();
-  motor.setSpeed(700);
-  motor.step(totalSteps);
+  int t = timeClient.getHours();
+
+  if (t != tempMin && !isPlaying) {
+    tempMin = t;
+    Serial.print("time: ");
+    Serial.println(tempMin);
+    motor.moveTo(motor.currentPosition() + totalSteps);
+  }
+
+  if (motor.distanceToGo() != 0) {
+    Serial.print("distanceToGo: ");
+    Serial.println(motor.distanceToGo());
+    isPlaying = true;
+    motor.run();
+  } else {
+    stop();
+    isPlaying = false;
+    Serial.println("stop");
+  }
+}
+
+void stop() {
+  motor.stop();  // Smoothly decelerate the motor
+  // Optionally, power off the motor
+  digitalWrite(A, LOW);
+  digitalWrite(B, LOW);
+  digitalWrite(C, LOW);
+  digitalWrite(D, LOW);
 }
